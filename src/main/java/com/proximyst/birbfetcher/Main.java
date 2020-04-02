@@ -196,6 +196,7 @@ public class Main {
               + "image MEDIUMBLOB NOT NULL,"
               + "source_url VARCHAR(512) NOT NULL,"
               + "content_type VARCHAR(64) NOT NULL,"
+              + "banned BOOL NOT NULL DEFAULT false,"
               + "PRIMARY KEY (id),"
               + "UNIQUE (hash)"
               + ")"
