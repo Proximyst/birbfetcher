@@ -9,10 +9,13 @@ import com.proximyst.birbfetcher.api.RedditPost;
 import com.proximyst.birbfetcher.http.RandomImage;
 import com.proximyst.birbfetcher.tasks.PostFetchTask;
 import com.proximyst.birbfetcher.tasks.PostProcessTask;
+import com.proximyst.birbfetcher.utils.Functions;
 import com.proximyst.birbfetcher.utils.TimeMeasurer;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
@@ -45,6 +48,9 @@ public class Main {
 
   @NotNull
   private static final Logger logger = LoggerFactory.getLogger(Main.class);
+
+  @NotNull
+  private static final File birbDirectory = new File("birbs");
 
   @NotNull
   private final BirbFetcherConfiguration configuration;
@@ -80,6 +86,8 @@ public class Main {
 
   @SuppressWarnings("ResultOfMethodCallIgnored")
   public static void main(String[] args) throws IOException {
+    birbDirectory.mkdirs();
+
     var timeMeasurer = new TimeMeasurer();
 
     timeMeasurer.start();
@@ -184,16 +192,56 @@ public class Main {
   }
 
   private void run() {
+    var timeMeasurer = new TimeMeasurer();
     try (var connection = getHikariDataSource().getConnection();
+        var checkImagesStmt = connection.createStatement();
         var createBirbsStmt = connection.createStatement();
         var createHashIndexStmt = connection.createStatement();
     ) {
+      timeMeasurer.start();
+      try (var hasImageColumn = checkImagesStmt.executeQuery("SHOW COLUMNS FROM birbs LIKE 'image'")) {
+        if (hasImageColumn.first()) {
+          // Have to migrate data first!
+          try (var getImagesStmt = connection.createStatement();
+              var result = getImagesStmt.executeQuery("SELECT hash, image FROM birbs");
+              var dropColumnStmt = connection.createStatement()) {
+            while (result.next()) {
+              var hash = Functions.bytesToHex(
+                  Functions.readEntireStream(
+                      result.getBinaryStream("hash")
+                  )
+              );
+              var image = Functions.readEntireStream(
+                  result.getBlob("image").getBinaryStream()
+              );
+
+              var file = new File(getBirbDirectory(), hash);
+              if (file.exists()) {
+                Files.delete(file.toPath());
+              }
+              file.createNewFile();
+              try (var stream = new FileOutputStream(file);
+                  var bufferedStream = new BufferedOutputStream(stream)) {
+                bufferedStream.write(image);
+              }
+            }
+
+            dropColumnStmt.executeUpdate("ALTER TABLE birbs DROP COLUMN image");
+          } catch (IOException ex) {
+            logger.error("Cannot migrate images!", ex);
+            return;
+          }
+        }
+      }
+      logger.info("Migration procedure took " + timeMeasurer.stop() + "ms.");
+      timeMeasurer.start();
+
       createBirbsStmt.executeUpdate(
           "CREATE TABLE IF NOT EXISTS birbs ("
               + "id INT NOT NULL AUTO_INCREMENT,"
               + "hash BINARY(32) NOT NULL,"
               + "permalink TINYTEXT NOT NULL,"
-              + "image MEDIUMBLOB NOT NULL,"
+//              + "image MEDIUMBLOB NOT NULL," // Now uses files.
               + "source_url VARCHAR(512) NOT NULL,"
               + "content_type VARCHAR(64) NOT NULL,"
               + "banned BOOL NOT NULL DEFAULT false,"
@@ -201,6 +249,7 @@ public class Main {
               + "UNIQUE (hash)"
               + ")"
       );
+
       try {
         createHashIndexStmt.executeUpdate(
             "ALTER TABLE birbs ADD UNIQUE INDEX hash_uidx (hash)"
@@ -212,6 +261,7 @@ public class Main {
           throw ex;
         }
       }
+      logger.info("Creating tables and indices took " + timeMeasurer.stop() + "ms.");
     } catch (SQLException ex) {
       logger.error("Could not setup SQL.", ex);
       return;
@@ -251,6 +301,11 @@ public class Main {
   @NotNull
   public static Gson getSimpleGson() {
     return simpleGson;
+  }
+
+  @NotNull
+  public static File getBirbDirectory() {
+    return birbDirectory;
   }
 
   @NotNull

@@ -8,11 +8,14 @@ import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.function.Function;
 import java.util.stream.Stream;
+import org.jetbrains.annotations.NotNull;
 
 public class Functions {
   private Functions() throws IllegalAccessException {
     throw new IllegalAccessException("com.proximyst.birbfetcher.utils.Functions cannot be instantiated.");
   }
+
+  private static final char[] HEXADECIMAL_CHARACTERS = "0123456789ABCDEF".toCharArray();
 
   public static <T> StringJoiner addCollection(
       Collection<T> collection,
@@ -73,11 +76,24 @@ public class Functions {
 
     while ((read = stream.read(buf)) > 0) {
       byteStream.write(buf, 0, read);
-      if (byteStream.size() > maxBytes) {
+      if (maxBytes > 0 && byteStream.size() > maxBytes) {
         return null;
       }
     }
 
     return byteStream.toByteArray();
+  }
+
+  @NotNull
+  public static String bytesToHex(@NotNull byte[] bytes) {
+    char[] hexChars = new char[bytes.length * 2];
+
+    for (int j = 0; j < bytes.length; j++) {
+      int character = bytes[j] & 0xFF;
+      hexChars[j * 2] = HEXADECIMAL_CHARACTERS[character >>> 4];
+      hexChars[j * 2 + 1] = HEXADECIMAL_CHARACTERS[character & 0x0F];
+    }
+
+    return new String(hexChars);
   }
 }

@@ -5,6 +5,9 @@ import com.proximyst.birbfetcher.Main;
 import com.proximyst.birbfetcher.api.RedditPost;
 import com.proximyst.birbfetcher.utils.Functions;
 import com.proximyst.birbfetcher.utils.Hashing;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.sql.Blob;
 import java.sql.SQLException;
@@ -98,13 +101,6 @@ public class PostProcessTask extends TimerTask {
   }
 
   private void savePost(RedditPost post, String source, String contentType, byte[] body) {
-    Blob imageBlob;
-    try {
-      imageBlob = new SerialBlob(body);
-    } catch (SQLException ex) {
-      logger.error("Could not make blob of image.", ex);
-      return;
-    }
     var hash = Hashing.sha256(body);
     Blob hashBlob;
     try {
@@ -115,19 +111,35 @@ public class PostProcessTask extends TimerTask {
     }
     var permalink = post.getPermalink();
 
+    var file = new File(Main.getBirbDirectory(), Functions.bytesToHex(hash));
+    if (file.isFile()) {
+      // Already exists.
+      return;
+    }
+
+    try {
+      file.createNewFile();
+      try (var stream = new FileOutputStream(file);
+          var buffered = new BufferedOutputStream(stream)) {
+        buffered.write(body);
+      }
+    } catch (IOException ex) {
+      logger.error("Could not save image of hash " + Functions.bytesToHex(hash), ex);
+      return;
+    }
+
     try (var connection = main.getHikariDataSource().getConnection();
         var insert = connection.prepareStatement(
-            "INSERT INTO birbs (hash, permalink, image, source_url, content_type) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO birbs (hash, permalink, source_url, content_type) VALUES (?, ?, ?, ?)"
         )) {
       insert.setBlob(1, hashBlob);
       insert.setString(2, permalink);
-      insert.setBlob(3, imageBlob);
-      insert.setString(4, source);
-      insert.setString(5, contentType);
+      insert.setString(3, source);
+      insert.setString(4, contentType);
       insert.executeUpdate();
     } catch (SQLException ex) {
       if (ex.getErrorCode() != Constants.DUPLICATE_VALUE_ERROR_CODE) {
-        logger.error("Could not insert image of hash " + hash + " at " + permalink, ex);
+        logger.error("Could not insert image of hash " + Functions.bytesToHex(hash) + " at " + permalink, ex);
       }
     }
   }
