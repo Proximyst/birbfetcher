@@ -1,0 +1,36 @@
+[package]
+name = "birbfetcher"
+version = "0.1.0"
+authors = ["Mariell Hoversholm <proximyst@proximyst.com>"]
+edition = "2018"
+
+[dependencies]
+dotenv = "0.15"
+
+thiserror = "1"
+anyhow = "1"
+
+log = "0.4"
+env_logger = "0.7"
+
+strum = "0.18"
+strum_macros = "0.18"
+
+[dependencies.sqlx]
+version = "0.3"
+default-features = false
+features = [
+	"macros",
+	"runtime-tokio",
+	"mysql",
+]
+
+[dependencies.warp]
+version = "0.2"
+default-features = false
+
+[dependencies.tokio]
+version = "0.2"
+features = [
+	"macros",
+]
