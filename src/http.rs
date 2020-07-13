@@ -62,7 +62,7 @@ pub async fn get_by_id(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<Re
 
 async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<Response<Vec<u8>>> {
     let data: (u32, Vec<u8>, String, String,) = sqlx::query_as(
-        "SELECT id, hash, permalink, content_type FROM birbs WHERE banned = false AND id = ? ORDER BY RAND() LIMIT 1"
+        "SELECT id, hash, permalink, content_type FROM birbs WHERE banned = false AND id = ? LIMIT 1"
         )
         .bind(id)
         .fetch_one(db)
