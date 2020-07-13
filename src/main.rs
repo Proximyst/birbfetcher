@@ -1,6 +1,8 @@
 mod error;
 mod migrations;
 mod reddit;
+mod tasks;
+mod utils;
 
 mod prelude {
     pub use crate::error::*;
@@ -16,6 +18,7 @@ use once_cell::sync::Lazy;
 use reqwest::Client;
 use std::env;
 use std::path::PathBuf;
+use std::time::Duration;
 use strum::IntoEnumIterator as _;
 
 pub static REQWEST_CLIENT: Lazy<Client> = Lazy::new(|| {
@@ -101,12 +104,25 @@ CREATE TABLE IF NOT EXISTS `meta_version`
 
     info!("Database connection created, and migrations finished!");
 
-    let birb_dir = env::var("BIRBS_DIRECTORY").unwrap_or_else(|_| "birbs".into());
+    let birb_dir = env::var("BIRB_DIRECTORY").unwrap_or_else(|_| "birbs".into());
     let birb_dir = PathBuf::from(birb_dir);
+    if birb_dir.metadata().is_err() {
+        std::fs::create_dir_all(&birb_dir)?;
+    }
 
     let subreddits = env::var("SUBREDDITS")
         .map(|l| l.split(',').map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_else(|_| vec!["birbs".into(), "parrots".into(), "birb".into()]);
+
+    tokio::spawn(async move {
+        let mut timer = async_timer::Interval::platform_new(Duration::from_secs(600));
+        let subreddits = subreddits;
+
+        loop {
+            tasks::fetch_posts(&pool, &birb_dir, &subreddits).await;
+            timer.as_mut().await;
+        }
+    });
 
     Ok(())
 }
