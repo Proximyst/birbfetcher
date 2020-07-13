@@ -1,5 +1,6 @@
 mod error;
 mod migrations;
+mod reddit;
 
 mod prelude {
     pub use crate::error::*;
@@ -7,8 +8,6 @@ mod prelude {
     pub use sqlx::prelude::*;
     pub use sqlx::MySqlPool;
     pub use std::sync::Arc;
-
-    pub type Pool = Arc<MySqlPool>;
 }
 
 use self::prelude::*;
@@ -34,17 +33,18 @@ async fn err_main() -> Result<()> {
         Err(e) if e.not_found() => (),
         Err(e) => return Err(e.into()),
     }
-    env_logger::try_init()?;
+    pretty_env_logger::try_init()?;
 
     let db = env::var("DATABASE_URL").context("`DATABASE_URL` must be set")?;
     info!("Connecting to database...");
     let pool = MySqlPool::new(&db).await?;
 
+    // {{{ Database migrations
     sqlx::query(
         r#"
 CREATE TABLE IF NOT EXISTS `meta_version`
 (
-    `key` TINYINT(1) NOT NULL DEFAULT 0,
+    `key` TINYINT(0) NOT NULL DEFAULT 0,
     `version` INT UNSIGNED NOT NULL,
 
     PRIMARY KEY (`key`)
@@ -70,9 +70,14 @@ CREATE TABLE IF NOT EXISTS `meta_version`
         for query in migration.queries() {
             sqlx::query(&query).execute(&pool).await?;
         }
-        debug!("Finished migrating to V{}", ver);
+        debug!("Finished migrating to V{}, now setting version...", ver);
+        sqlx::query(&format!("UPDATE `meta_version` SET `version` = {}", ver))
+            .execute(&pool)
+            .await?;
+        debug!("Version set to {}", ver);
     }
-    
+    // }}}
+
     info!("Database connection created, and migrations finished!");
 
     Ok(())
