@@ -12,8 +12,29 @@ mod prelude {
 
 use self::prelude::*;
 use anyhow::{Context as _, Result};
+use once_cell::sync::Lazy;
+use reqwest::Client;
 use std::env;
+use std::path::PathBuf;
 use strum::IntoEnumIterator as _;
+
+pub static REQWEST_CLIENT: Lazy<Client> = Lazy::new(|| {
+    use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        USER_AGENT,
+        HeaderValue::from_str(
+            &env::var("USER_AGENT").unwrap_or_else(|_| "Mozilla/5.0 birbfetcher/bot".into()),
+        )
+        .expect("a valid USER_AGENT env var is required"),
+    );
+
+    Client::builder()
+        .use_rustls_tls()
+        .default_headers(headers)
+        .build()
+        .expect("a reqwest client is required")
+});
 
 #[tokio::main]
 async fn main() {
@@ -79,6 +100,13 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     // }}}
 
     info!("Database connection created, and migrations finished!");
+
+    let birb_dir = env::var("BIRBS_DIRECTORY").unwrap_or_else(|_| "birbs".into());
+    let birb_dir = PathBuf::from(birb_dir);
+
+    let subreddits = env::var("SUBREDDITS")
+        .map(|l| l.split(',').map(str::to_owned).collect::<Vec<_>>())
+        .unwrap_or_else(|_| vec!["birbs".into(), "parrots".into(), "birb".into()]);
 
     Ok(())
 }
