@@ -1,0 +1,22 @@
+= 🐦 birbfetcher
+
+Ever wanted to fetch some pretty birds from Reddit? Now you can!
+
+== 💻 Compilation
+
+This requires a Rust toolchain of version v1.44 or higher.
+
+Simply run `cargo build --release`, and use the file in `target/release`.
+
+== 📚 Usage
+
+To run the jar, you need a GNU/libc environment.
+
+Create a `.env` file using the link:./.env.sample[`.env.sample`] file.
+
+A web server serving random images is hosted on port `8080`, as this is designed
+for use in link:https://www.docker.com/[Docker].
+
+== ⚖️ Licence
+
+The software is link:./LICENCE[licensed] under the GNU Public Licence v3.0.
