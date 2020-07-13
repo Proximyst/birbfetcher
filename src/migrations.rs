@@ -8,6 +8,7 @@ pub enum Migrations {
     // Simply add a new variant called `V2` after `V1`; no `= 2` is required.
     V1 = 1,
     V2,
+    V3,
 }
 
 impl Migrations {
@@ -15,6 +16,7 @@ impl Migrations {
         match self {
             Self::V1 => include_str!("migrations/0001-create-tables.sql"),
             Self::V2 => include_str!("migrations/0002-add-verified-column.sql"),
+            Self::V3 => include_str!("migrations/0003-unsigned-id-column.sql"),
         }
         .split(';')
         .map(str::trim)

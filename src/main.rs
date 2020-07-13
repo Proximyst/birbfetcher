@@ -1,4 +1,5 @@
 mod error;
+mod http;
 mod migrations;
 mod reddit;
 mod tasks;
@@ -20,6 +21,7 @@ use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
 use strum::IntoEnumIterator as _;
+use warp::Filter as _;
 
 pub static REQWEST_CLIENT: Lazy<Client> = Lazy::new(|| {
     use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
@@ -114,15 +116,28 @@ CREATE TABLE IF NOT EXISTS `meta_version`
         .map(|l| l.split(',').map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_else(|_| vec!["birbs".into(), "parrots".into(), "birb".into()]);
 
+    let timer_pool = pool.clone();
+    let timer_birb_dir = birb_dir.clone();
     tokio::spawn(async move {
         let mut timer = async_timer::Interval::platform_new(Duration::from_secs(600));
         let subreddits = subreddits;
+        let pool = timer_pool;
+        let birb_dir = timer_birb_dir;
 
         loop {
             tasks::fetch_posts(&pool, &birb_dir, &subreddits).await;
             timer.as_mut().await;
         }
     });
+
+    // GET / - random image
+    let random = warp::path::end().and_then(move || {
+        let pool = pool.clone();
+        let birb_dir = birb_dir.clone();
+        async move { self::http::random(&pool, &birb_dir).await }
+    });
+
+    warp::serve(random).run(([0, 0, 0, 0], 8080)).await;
 
     Ok(())
 }
