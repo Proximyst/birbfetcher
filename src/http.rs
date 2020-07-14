@@ -19,39 +19,29 @@ pub async fn random(db: &MySqlPool, birb_dir: &PathBuf) -> Result<Response<Vec<u
 }
 
 async fn random_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<Response<Vec<u8>>> {
-    let data: (u32, Vec<u8>, String, String,) = sqlx::query_as(
-        "SELECT id, hash, permalink, content_type FROM birbs WHERE banned = false ORDER BY RAND() LIMIT 1"
+    serve_image(
+        birb_dir,
+
+        sqlx::query_as(
+            "SELECT id, hash, permalink, content_type FROM birbs WHERE banned = false ORDER BY RAND() LIMIT 1"
         )
         .fetch_one(db)
-        .await?;
-    let (id, hash, permalink, content_type) = data;
-
-    let hex = hex::encode_upper(hash);
-    let file = birb_dir.join(&hex);
-
-    Response::builder()
-        .header("Content-Type", content_type)
-        .header(
-            warp::http::header::SET_COOKIE,
-            format!("Id={}; SameSite=Strict; HttpOnly", id),
-        )
-        .header(
-            warp::http::header::SET_COOKIE,
-            format!("Permalink={}; SameSite=Strict; HttpOnly", permalink),
-        )
-        .header(
-            warp::http::header::SET_COOKIE,
-            format!("Hash={}; SameSite=Strict; HttpOnly", hex),
-        )
-        .body(fs::read(file)?)
-        .map_err(Into::into)
+        .await?
+    ).await
 }
 
-pub async fn get_by_id(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<Response<Vec<u8>>, Rejection> {
+pub async fn get_by_id(
+    db: &MySqlPool,
+    birb_dir: &PathBuf,
+    id: u32,
+) -> Result<Response<Vec<u8>>, Rejection> {
     Ok(match get_by_id_impl(db, birb_dir, id).await {
         Ok(resp) => resp,
         Err(e) => {
-            error!("Error upon calling get_by_id HTTP endpoint for ID {}: {}", id, e);
+            error!(
+                "Error upon calling get_by_id HTTP endpoint for ID {}: {}",
+                id, e
+            );
             Response::builder()
                 .status(500)
                 .body(e.to_string().into_bytes())
@@ -61,14 +51,22 @@ pub async fn get_by_id(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<Re
 }
 
 async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<Response<Vec<u8>>> {
-    let data: (u32, Vec<u8>, String, String,) = sqlx::query_as(
-        "SELECT id, hash, permalink, content_type FROM birbs WHERE banned = false AND id = ? LIMIT 1"
+    serve_image(
+        birb_dir,
+
+        sqlx::query_as(
+            "SELECT id, hash, permalink, content_type FROM birbs WHERE banned = false AND id = ? LIMIT 1"
         )
         .bind(id)
         .fetch_one(db)
-        .await?;
-    let (_, hash, permalink, content_type) = data;
+        .await?
+    ).await
+}
 
+async fn serve_image(
+    birb_dir: &PathBuf,
+    (id, hash, permalink, content_type): (u32, Vec<u8>, String, String),
+) -> Result<Response<Vec<u8>>> {
     let hex = hex::encode_upper(hash);
     let file = birb_dir.join(&hex);
 
@@ -89,4 +87,3 @@ async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<R
         .body(fs::read(file)?)
         .map_err(Into::into)
 }
-
