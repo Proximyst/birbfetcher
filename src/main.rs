@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS `meta_version`
         .map(|l| l.split(',').map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_else(|_| vec!["birbs".into(), "parrots".into(), "birb".into()]);
 
+    // {{{ Fetch posts every 10 min timer
     let timer_pool = pool.clone();
     let timer_birb_dir = birb_dir.clone();
     tokio::spawn(async move {
@@ -129,8 +130,9 @@ CREATE TABLE IF NOT EXISTS `meta_version`
             timer.as_mut().await;
         }
     });
+    // }}}
 
-    // GET / - random image
+    // {{{ GET / - random image
     let random_pool = pool.clone();
     let random_birb_dir = birb_dir.clone();
     let random = warp::path::end().and_then(move || {
@@ -138,8 +140,9 @@ CREATE TABLE IF NOT EXISTS `meta_version`
         let birb_dir = random_birb_dir.clone();
         async move { self::http::random(&pool, &birb_dir).await }
     });
+    // }}}
 
-    // GET /id/:id - get image by id if unbanned
+    // {{{ GET /id/:id - get image by id if unbanned
     let get_by_id_pool = pool.clone();
     let get_by_id_birb_dir = birb_dir.clone();
     let get_by_id = warp::get()
@@ -151,8 +154,22 @@ CREATE TABLE IF NOT EXISTS `meta_version`
             let birb_dir = get_by_id_birb_dir.clone();
             async move { self::http::get_by_id(&pool, &birb_dir, id).await }
         });
+    // }}}
 
-    warp::serve(random.or(get_by_id))
+    // {{{ GET /info/id/:id - get image info by id
+    let get_info_by_id_pool = pool.clone();
+    let get_info_by_id = warp::get()
+        .and(warp::path("info"))
+        .and(warp::path("id"))
+        .and(warp::path::param())
+        .and(warp::path::end())
+        .and_then(move |id: u32| {
+            let pool = get_info_by_id_pool.clone();
+            async move { self::http::get_info_by_id(&pool, id).await }
+        });
+    // }}}
+
+    warp::serve(random.or(get_by_id).or(get_info_by_id))
         .run(([0, 0, 0, 0], 8080))
         .await;
 
