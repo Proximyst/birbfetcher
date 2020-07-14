@@ -5,17 +5,39 @@ use std::path::PathBuf;
 use warp::http::Response;
 use warp::Rejection;
 
+macro_rules! delegate {
+    ($impl:expr => |$err:ident| $errlog:block) => {
+        Ok(match $impl.await {
+            Ok(resp) => resp,
+            Err($err) => {
+                $errlog;
+                Response::builder()
+                    .status(500)
+                    .body($err.to_string().into_bytes())
+                    .unwrap()
+            }
+        })
+    };
+    ($impl:expr => |$err:ident| $errlog:expr) => {
+        delegate!($impl => |$err| { $errlog; })
+    };
+}
+
+macro_rules! cookie {
+    ($name:literal = $value:expr) => {
+        format!(
+            "{name}={value}; SameSite=Strict; HttpOnly",
+            name = $name,
+            value = $value
+        )
+    };
+}
+
 pub async fn random(db: &MySqlPool, birb_dir: &PathBuf) -> Result<Response<Vec<u8>>, Rejection> {
-    Ok(match random_impl(db, birb_dir).await {
-        Ok(resp) => resp,
-        Err(e) => {
-            error!("Error upon calling random HTTP endpoint: {}", e);
-            Response::builder()
-                .status(500)
-                .body(e.to_string().into_bytes())
-                .unwrap()
-        }
-    })
+    delegate! {
+        random_impl(db, birb_dir) => |e|
+            error!("Error upon calling random HTTP endpoint: {}", e)
+    }
 }
 
 async fn random_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<Response<Vec<u8>>> {
@@ -35,19 +57,13 @@ pub async fn get_by_id(
     birb_dir: &PathBuf,
     id: u32,
 ) -> Result<Response<Vec<u8>>, Rejection> {
-    Ok(match get_by_id_impl(db, birb_dir, id).await {
-        Ok(resp) => resp,
-        Err(e) => {
+    delegate! {
+        get_by_id_impl(db, birb_dir, id) => |e|
             error!(
                 "Error upon calling get_by_id HTTP endpoint for ID {}: {}",
                 id, e
-            );
-            Response::builder()
-                .status(500)
-                .body(e.to_string().into_bytes())
-                .unwrap()
-        }
-    })
+            )
+    }
 }
 
 async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<Response<Vec<u8>>> {
@@ -72,18 +88,12 @@ async fn serve_image(
 
     Response::builder()
         .header("Content-Type", content_type)
+        .header(warp::http::header::SET_COOKIE, cookie!("Id" = id))
         .header(
             warp::http::header::SET_COOKIE,
-            format!("Id={}; SameSite=Strict; HttpOnly", id),
+            cookie!("Permalink" = permalink),
         )
-        .header(
-            warp::http::header::SET_COOKIE,
-            format!("Permalink={}; SameSite=Strict; HttpOnly", permalink),
-        )
-        .header(
-            warp::http::header::SET_COOKIE,
-            format!("Hash={}; SameSite=Strict; HttpOnly", hex),
-        )
+        .header(warp::http::header::SET_COOKIE, cookie!("Hash" = hex))
         .body(fs::read(file)?)
         .map_err(Into::into)
 }
