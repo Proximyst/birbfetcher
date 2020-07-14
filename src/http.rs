@@ -33,15 +33,15 @@ async fn random_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<Response<Vec<
         .header("Content-Type", content_type)
         .header(
             warp::http::header::SET_COOKIE,
-            format!("Id={}; SameSite=Strict; HttpOpnly", id),
+            format!("Id={}; SameSite=Strict; HttpOnly", id),
         )
         .header(
             warp::http::header::SET_COOKIE,
-            format!("Permalink={}; SameSite=Strict; HttpOpnly", permalink),
+            format!("Permalink={}; SameSite=Strict; HttpOnly", permalink),
         )
         .header(
             warp::http::header::SET_COOKIE,
-            format!("Hash={}; SameSite=Strict; HttpOpnly", hex),
+            format!("Hash={}; SameSite=Strict; HttpOnly", hex),
         )
         .body(fs::read(file)?)
         .map_err(Into::into)
@@ -76,15 +76,15 @@ async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<R
         .header("Content-Type", content_type)
         .header(
             warp::http::header::SET_COOKIE,
-            format!("Id={}; SameSite=Strict; HttpOpnly", id),
+            format!("Id={}; SameSite=Strict; HttpOnly", id),
         )
         .header(
             warp::http::header::SET_COOKIE,
-            format!("Permalink={}; SameSite=Strict; HttpOpnly", permalink),
+            format!("Permalink={}; SameSite=Strict; HttpOnly", permalink),
         )
         .header(
             warp::http::header::SET_COOKIE,
-            format!("Hash={}; SameSite=Strict; HttpOpnly", hex),
+            format!("Hash={}; SameSite=Strict; HttpOnly", hex),
         )
         .body(fs::read(file)?)
         .map_err(Into::into)
