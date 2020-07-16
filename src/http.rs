@@ -97,9 +97,9 @@ pub async fn get_info_by_id(db: &MySqlPool, id: u32) -> Result<impl Reply, Rejec
 }
 
 async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply> {
-    let (id, hash, permalink, content_type, banned): (u32, Vec<u8>, String, String, bool) =
+    let (id, hash, permalink, content_type, banned, verified): (u32, Vec<u8>, String, String, bool, bool) =
         sqlx::query_as(
-            "SELECT id, hash, permalink, content_type, banned FROM birbs WHERE id = ? LIMIT 1",
+            "SELECT id, hash, permalink, content_type, banned, verified FROM birbs WHERE id = ? LIMIT 1",
         )
         .bind(id)
         .fetch_one(db)
@@ -112,6 +112,7 @@ async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply> {
         permalink: String,
         content_type: String,
         banned: bool,
+        verified: bool,
     }
 
     let data = ImageData {
@@ -120,6 +121,7 @@ async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply> {
         permalink,
         content_type,
         banned,
+        verified,
     };
 
     Ok(warp::reply::json(&data))
@@ -160,6 +162,7 @@ impl<E: ToString> From<E> for StdErrorReject {
 }
 // }}}
 
+// {{{ Handle rejections
 pub async fn handle_rejection(rej: Rejection) -> Result<impl Reply, Infallible> {
     #[derive(Serialize)]
     struct Error<'a> {
@@ -191,3 +194,4 @@ pub async fn handle_rejection(rej: Rejection) -> Result<impl Reply, Infallible> 
         code,
     ))
 }
+// }}}
