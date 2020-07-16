@@ -1,9 +1,11 @@
 use crate::prelude::*;
 use anyhow::Result;
 use serde::Serialize;
+use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fs;
 use std::path::PathBuf;
-use warp::http::Response;
+use warp::http::{Response, StatusCode};
 use warp::{Rejection, Reply};
 
 // {{{ Macros
@@ -84,10 +86,7 @@ async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<i
 // }}}
 
 // {{{ GET /info/id/:id - get image info by id
-pub async fn get_info_by_id(
-    db: &MySqlPool,
-    id: u32,
-) -> Result<impl Reply, Rejection> {
+pub async fn get_info_by_id(db: &MySqlPool, id: u32) -> Result<impl Reply, Rejection> {
     delegate! {
         get_info_by_id_impl(db, id) => |e|
             error!(
@@ -99,10 +98,12 @@ pub async fn get_info_by_id(
 
 async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply> {
     let (id, hash, permalink, content_type, banned): (u32, Vec<u8>, String, String, bool) =
-        sqlx::query_as("SELECT id, hash, permalink, content_type, banned FROM birbs WHERE id = ? LIMIT 1")
-            .bind(id)
-            .fetch_one(db)
-            .await?;
+        sqlx::query_as(
+            "SELECT id, hash, permalink, content_type, banned FROM birbs WHERE id = ? LIMIT 1",
+        )
+        .bind(id)
+        .fetch_one(db)
+        .await?;
 
     #[derive(Serialize)]
     struct ImageData {
@@ -158,3 +159,35 @@ impl<E: ToString> From<E> for StdErrorReject {
     }
 }
 // }}}
+
+pub async fn handle_rejection(rej: Rejection) -> Result<impl Reply, Infallible> {
+    #[derive(Serialize)]
+    struct Error<'a> {
+        code: u16,
+        code_name: Option<&'a str>,
+        message: String,
+    }
+
+    let code;
+    let message;
+
+    if rej.is_not_found() {
+        code = StatusCode::NOT_FOUND;
+        message = "NOT_FOUND".into();
+    } else if let Some(err) = rej.find::<StdErrorReject>() {
+        code = StatusCode::BAD_REQUEST;
+        message = err.0.to_string();
+    } else {
+        code = StatusCode::INTERNAL_SERVER_ERROR;
+        message = format!("UNHANDLED_REJECTION: {:?}", rej);
+    }
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&Error {
+            code: code.as_u16(),
+            code_name: code.canonical_reason(),
+            message,
+        }),
+        code,
+    ))
+}

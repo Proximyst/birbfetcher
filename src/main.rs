@@ -169,9 +169,14 @@ CREATE TABLE IF NOT EXISTS `meta_version`
         });
     // }}}
 
-    warp::serve(random.or(get_by_id).or(get_info_by_id))
-        .run(([0, 0, 0, 0], 8080))
-        .await;
+    warp::serve(
+        random
+            .or(get_by_id)
+            .or(get_info_by_id)
+            .recover(self::http::handle_rejection),
+    )
+    .run(([0, 0, 0, 0], 8080))
+    .await;
 
     Ok(())
 }
