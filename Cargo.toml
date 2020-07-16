@@ -24,6 +24,10 @@ async-timer = "1.0.0-beta.4"
 sha2 = "0.9"
 hex = "0.4"
 
+futures = "0.3"
+
+serenity = "0.8"
+
 [dependencies.serde]
 version = "1"
 features = [
@@ -53,6 +57,3 @@ features = [
 version = "0.10"
 default-features = false
 features = ["rustls-tls"]
-
-[profile.release]
-lto = true

@@ -1,3 +1,4 @@
+mod discord;
 mod error;
 mod http;
 mod migrations;
@@ -16,14 +17,17 @@ mod prelude {
 use self::prelude::*;
 use anyhow::{Context as _, Result};
 use once_cell::sync::Lazy;
-use reqwest::Client;
+use reqwest::Client as ReqwestClient;
+use serenity::client::Client as DiscordClient;
+use serenity::framework::standard::StandardFramework;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
 use strum::IntoEnumIterator as _;
 use warp::Filter as _;
 
-pub static REQWEST_CLIENT: Lazy<Client> = Lazy::new(|| {
+pub static REQWEST_CLIENT: Lazy<ReqwestClient> = Lazy::new(|| {
     use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -34,7 +38,7 @@ pub static REQWEST_CLIENT: Lazy<Client> = Lazy::new(|| {
         .expect("a valid USER_AGENT env var is required"),
     );
 
-    Client::builder()
+    ReqwestClient::builder()
         .use_rustls_tls()
         .default_headers(headers)
         .build()
@@ -115,6 +119,49 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     let subreddits = env::var("SUBREDDITS")
         .map(|l| l.split(',').map(str::to_owned).collect::<Vec<_>>())
         .unwrap_or_else(|_| vec!["birbs".into(), "parrots".into(), "birb".into()]);
+
+    // {{{ Discord bot
+    let mut discord = DiscordClient::new(
+        &env::var("DISCORD_TOKEN").context("`DISCORD_TOKEN` must be set")?,
+        self::discord::Handler,
+    )
+    .context("error creating client")?;
+
+    let (discord_owners, bot_id) = match discord.cache_and_http.http.get_current_application_info()
+    {
+        Ok(info) => {
+            let mut owners = HashSet::new();
+            owners.insert(info.owner.id);
+
+            (owners, info.id)
+        }
+        Err(why) => return Err(why.into()),
+    };
+
+    {
+        let mut data = discord.data.write();
+        data.insert::<self::discord::DatabaseContainer>(pool.clone());
+        data.insert::<self::discord::ImagesContainer>(HashMap::new());
+    }
+
+    discord.with_framework(
+        StandardFramework::new()
+            .configure(|c| {
+                c.prefix(&env::var("DISCORD_PREFIX").unwrap_or_else(|_| "b!".into()))
+                    .on_mention(Some(bot_id))
+                    .owners(discord_owners)
+                    .delimiters(vec![" "])
+            })
+            .help(&self::discord::HELP)
+            .group(&self::discord::OWNER_GROUP),
+    );
+
+    tokio::spawn(async move {
+        if let Err(e) = discord.start() {
+            error!("Discord error: {:?}", e);
+        }
+    });
+    // }}}
 
     // {{{ Fetch posts every 10 min timer
     let timer_pool = pool.clone();
