@@ -168,7 +168,7 @@ async fn serve_image(
         .header(warp::http::header::SET_COOKIE, cookie!("Hash" = hex))
         .header(
             warp::http::header::CONTENT_DISPOSITION,
-            format!(r#"attachment; filename="{}.{}"#, id, extension),
+            format!(r#"inline; filename="{}.{}"#, id, extension),
         )
         .body(fs::read(file)?)
         .map_err(Into::into)
