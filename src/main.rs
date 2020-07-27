@@ -212,7 +212,9 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     // {{{ GET / - random image
     let root_pool = pool.clone();
     let root_birb_dir = birb_dir.clone();
-    let root = warp::path::end().and_then(move || {
+    let root = warp::get()
+        .and(warp::path::end())
+        .and_then(move || {
         let pool = root_pool.clone();
         let birb_dir = root_birb_dir.clone();
         async move { self::http::random_image(&pool, &birb_dir).await }
