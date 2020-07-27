@@ -152,10 +152,9 @@ async fn serve_image(
     let hex = hex::encode_upper(hash);
     let file = birb_dir.join(&hex);
 
-    let extension = mime_guess::get_mime_extensions_str(&content_type)
-        .map(|ext| ext.first())
-        .flatten()
-        .map(|s| *s)
+    let extension = crate::utils::CONTENT_TYPE_EXTENSIONS
+        .get(content_type.as_str())
+        .copied()
         .unwrap_or("bin");
 
     Response::builder()
@@ -168,7 +167,7 @@ async fn serve_image(
         .header(warp::http::header::SET_COOKIE, cookie!("Hash" = hex))
         .header(
             warp::http::header::CONTENT_DISPOSITION,
-            format!(r#"inline; filename="{}.{}"#, id, extension),
+            format!(r#"inline; filename="{}.{}""#, id, extension),
         )
         .body(fs::read(file)?)
         .map_err(Into::into)

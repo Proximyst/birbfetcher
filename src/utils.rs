@@ -15,6 +15,19 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use sha2::Digest as _;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+
+pub static CONTENT_TYPE_EXTENSIONS: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
+    let mut map = HashMap::new();
+    map.insert("image/jpeg", "jpeg");
+    map.insert("image/jpg", "jpeg");
+    map.insert("image/png", "png");
+    map.insert("image/gif", "gif");
+    map.insert("image/gif", "gifv");
+    map.insert("video/webm", "webm");
+    map
+});
 
 pub fn sha256(block: impl FnOnce(&mut sha2::Sha256) -> ()) -> Vec<u8> {
     let mut sha = sha2::Sha256::new();

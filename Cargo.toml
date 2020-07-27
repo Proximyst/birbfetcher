@@ -1,6 +1,6 @@
 [package]
 name = "birbfetcher"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Mariell Hoversholm <proximyst@proximyst.com>"]
 edition = "2018"
 
@@ -27,8 +27,6 @@ hex = "0.4"
 futures = "0.3"
 
 serenity = "0.8"
-
-mime_guess = "2"
 
 [dependencies.serde]
 version = "1"
