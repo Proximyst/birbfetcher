@@ -10,8 +10,6 @@ Simply run `cargo build --release`, and use the file in `target/release`.
 
 == 📚 Usage
 
-To run the jar, you need a GNU/libc environment.
-
 Create a `.env` file using the link:./.env.sample[`.env.sample`] file.
 
 A web server serving random images is hosted on port `8080`, as this is designed
