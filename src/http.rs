@@ -51,15 +51,15 @@ macro_rules! cookie {
 }
 // }}}
 
-// {{{ GET /random - random image
-pub async fn random(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Reply, Rejection> {
+// {{{ GET /random/image - random image
+pub async fn random_image(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Reply, Rejection> {
     delegate! {
-        random_impl(db, birb_dir) => |e|
-            error!("Error upon calling random HTTP endpoint: {}", e)
+        random_image_impl(db, birb_dir) => |e|
+            error!("Error upon calling random image HTTP endpoint: {}", e)
     }
 }
 
-async fn random_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Reply> {
+async fn random_image_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Reply> {
     serve_image(
         birb_dir,
 

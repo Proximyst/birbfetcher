@@ -213,22 +213,23 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     let root_pool = pool.clone();
     let root_birb_dir = birb_dir.clone();
     let root = warp::path::end().and_then(move || {
-        let pool = root.clone();
-        let birb_dir = root.clone();
-        async move { self::http::random(&pool, &birb_dir).await }
+        let pool = root_pool.clone();
+        let birb_dir = root_birb_dir.clone();
+        async move { self::http::random_image(&pool, &birb_dir).await }
     });
     // }}}
 
-    // {{{ GET /random - random image
+    // {{{ GET /random/image - random image
     let random_pool = pool.clone();
     let random_birb_dir = birb_dir.clone();
     let random = warp::get()
         .and(warp::path("random"))
+        .and(warp::path("image"))
         .and(warp::path::end())
         .and_then(move || {
             let pool = random_pool.clone();
             let birb_dir = random_birb_dir.clone();
-            async move { self::http::random(&pool, &birb_dir).await }
+            async move { self::http::random_image(&pool, &birb_dir).await }
         });
     // }}}
 
