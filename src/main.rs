@@ -63,13 +63,20 @@ pub static REQWEST_CLIENT: Lazy<ReqwestClient> = Lazy::new(|| {
 
 #[tokio::main]
 async fn main() {
-    eprintln!(concat!(env!("CARGO_PKG_NAME"), " (v", env!("CARGO_PKG_VERSION"), ")"));
-    eprintln!(r#"
+    eprintln!(concat!(
+        env!("CARGO_PKG_NAME"),
+        " (v",
+        env!("CARGO_PKG_VERSION"),
+        ")"
+    ));
+    eprintln!(
+        r#"
 birbfetcher Copyright (C) 2020 Mariell Hoversholm
 This program comes with ABSOLUTELY NO WARRANTY.
 This is free software, and you are welcome to redistribute it
 under certain conditions.
-"#);
+"#
+    );
     match err_main().await {
         Ok(()) => return,
         Err(e) => {
@@ -203,13 +210,26 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     // }}}
 
     // {{{ GET / - random image
-    let random_pool = pool.clone();
-    let random_birb_dir = birb_dir.clone();
-    let random = warp::path::end().and_then(move || {
-        let pool = random_pool.clone();
-        let birb_dir = random_birb_dir.clone();
+    let root_pool = pool.clone();
+    let root_birb_dir = birb_dir.clone();
+    let root = warp::path::end().and_then(move || {
+        let pool = root.clone();
+        let birb_dir = root.clone();
         async move { self::http::random(&pool, &birb_dir).await }
     });
+    // }}}
+
+    // {{{ GET /random - random image
+    let random_pool = pool.clone();
+    let random_birb_dir = birb_dir.clone();
+    let random = warp::get()
+        .and(warp::path("random"))
+        .and(warp::path::end())
+        .and_then(move || {
+            let pool = random_pool.clone();
+            let birb_dir = random_birb_dir.clone();
+            async move { self::http::random(&pool, &birb_dir).await }
+        });
     // }}}
 
     // {{{ GET /id/:id - get image by id if unbanned
@@ -240,7 +260,8 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     // }}}
 
     warp::serve(
-        random
+        root
+            .or(random)
             .or(get_by_id)
             .or(get_info_by_id)
             .recover(self::http::handle_rejection),

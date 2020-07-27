@@ -51,7 +51,7 @@ macro_rules! cookie {
 }
 // }}}
 
-// {{{ GET / - random image
+// {{{ GET /random - random image
 pub async fn random(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Reply, Rejection> {
     delegate! {
         random_impl(db, birb_dir) => |e|
@@ -152,14 +152,24 @@ async fn serve_image(
     let hex = hex::encode_upper(hash);
     let file = birb_dir.join(&hex);
 
+    let extension = mime_guess::get_mime_extensions_str(&content_type)
+        .map(|ext| ext.first())
+        .flatten()
+        .map(|s| *s)
+        .unwrap_or("bin");
+
     Response::builder()
-        .header("Content-Type", content_type)
+        .header(warp::http::header::CONTENT_TYPE, content_type)
         .header(warp::http::header::SET_COOKIE, cookie!("Id" = id))
         .header(
             warp::http::header::SET_COOKIE,
             cookie!("Permalink" = permalink),
         )
         .header(warp::http::header::SET_COOKIE, cookie!("Hash" = hex))
+        .header(
+            warp::http::header::CONTENT_DISPOSITION,
+            format!(r#"attachment; filename="{}.{}"#, id, extension),
+        )
         .body(fs::read(file)?)
         .map_err(Into::into)
 }
