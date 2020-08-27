@@ -18,7 +18,6 @@ use crate::prelude::*;
 use anyhow::Result;
 use serde::Serialize;
 use std::convert::Infallible;
-use std::fmt::Debug;
 use std::fs;
 use std::path::PathBuf;
 use warp::http::{Response, StatusCode};
@@ -31,7 +30,7 @@ macro_rules! delegate {
             Ok(resp) => Ok(resp),
             Err($err) => {
                 $errlog;
-                Err(warp::reject::custom(StdErrorReject::from($err)))
+                Err(warp::reject::custom($err))
             }
         }
     };
@@ -59,7 +58,7 @@ pub async fn random_image(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Rep
     }
 }
 
-async fn random_image_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Reply> {
+async fn random_image_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Reply, HttpError> {
     serve_image(
         birb_dir,
 
@@ -67,7 +66,8 @@ async fn random_image_impl(db: &MySqlPool, birb_dir: &PathBuf) -> Result<impl Re
             "SELECT id, hash, permalink, content_type FROM birbs WHERE banned = false ORDER BY RAND() LIMIT 1"
         )
         .fetch_one(db)
-        .await?
+        .await
+        .status(StatusCode::INTERNAL_SERVER_ERROR)?
     ).await
 }
 // }}}
@@ -87,7 +87,11 @@ pub async fn get_by_id(
     }
 }
 
-async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<impl Reply> {
+async fn get_by_id_impl(
+    db: &MySqlPool,
+    birb_dir: &PathBuf,
+    id: u32,
+) -> Result<impl Reply, HttpError> {
     serve_image(
         birb_dir,
 
@@ -96,7 +100,8 @@ async fn get_by_id_impl(db: &MySqlPool, birb_dir: &PathBuf, id: u32) -> Result<i
         )
         .bind(id)
         .fetch_one(db)
-        .await?
+        .await
+        .status(StatusCode::NOT_FOUND)?
     ).await
 }
 // }}}
@@ -112,14 +117,15 @@ pub async fn get_info_by_id(db: &MySqlPool, id: u32) -> Result<impl Reply, Rejec
     }
 }
 
-async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply> {
+async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply, HttpError> {
     let (id, hash, permalink, content_type, banned, verified): (u32, Vec<u8>, String, String, bool, bool) =
         sqlx::query_as(
             "SELECT id, hash, permalink, content_type, banned, verified FROM birbs WHERE id = ? LIMIT 1",
         )
         .bind(id)
         .fetch_one(db)
-        .await?;
+        .await
+        .status(StatusCode::NOT_FOUND)?;
 
     #[derive(Serialize)]
     struct ImageData {
@@ -148,7 +154,7 @@ async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply> {
 async fn serve_image(
     birb_dir: &PathBuf,
     (id, hash, permalink, content_type): (u32, Vec<u8>, String, String),
-) -> Result<Response<Vec<u8>>> {
+) -> Result<Response<Vec<u8>>, HttpError> {
     let hex = hex::encode_upper(hash);
     let file = birb_dir.join(&hex);
 
@@ -169,21 +175,8 @@ async fn serve_image(
             warp::http::header::CONTENT_DISPOSITION,
             format!(r#"inline; filename="{}.{}""#, id, extension),
         )
-        .body(fs::read(file)?)
-        .map_err(Into::into)
-}
-// }}}
-
-// {{{ Reject impl
-#[derive(Debug)]
-struct StdErrorReject(String);
-
-impl warp::reject::Reject for StdErrorReject {}
-
-impl<E: ToString> From<E> for StdErrorReject {
-    fn from(e: E) -> Self {
-        StdErrorReject(e.to_string())
-    }
+        .body(fs::read(file).status(StatusCode::INTERNAL_SERVER_ERROR)?)
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
 }
 // }}}
 
@@ -199,12 +192,12 @@ pub async fn handle_rejection(rej: Rejection) -> Result<impl Reply, Infallible> 
     let code;
     let message;
 
-    if rej.is_not_found() {
+    if let Some(err) = rej.find::<HttpError>() {
+        code = err.status;
+        message = err.source.to_string();
+    } else if rej.is_not_found() {
         code = StatusCode::NOT_FOUND;
         message = "NOT_FOUND".into();
-    } else if let Some(err) = rej.find::<StdErrorReject>() {
-        code = StatusCode::BAD_REQUEST;
-        message = err.0.to_string();
     } else {
         code = StatusCode::INTERNAL_SERVER_ERROR;
         message = format!("UNHANDLED_REJECTION: {:?}", rej);
