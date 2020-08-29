@@ -151,6 +151,7 @@ async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply, Http
 // }}}
 
 // {{{ serve_image - serve an image from db info
+/// Serve an image using information given.
 async fn serve_image(
     birb_dir: &PathBuf,
     (id, hash, permalink, content_type): (u32, Vec<u8>, String, String),
@@ -181,7 +182,12 @@ async fn serve_image(
 // }}}
 
 // {{{ Handle rejections
+/// Handle rejections.
+///
+/// This creates a JSON string with information and a status code for the
+/// response.
 pub async fn handle_rejection(rej: Rejection) -> Result<impl Reply, Infallible> {
+    // We need an error struct to serialise to a JSON string.
     #[derive(Serialize)]
     struct Error<'a> {
         code: u16,

@@ -28,6 +28,12 @@ futures = "0.3"
 
 serenity = "0.8"
 
+[dependencies.phf]
+version = "0.8"
+features = [
+	"macros",
+]
+
 [dependencies.serde]
 version = "1"
 features = [

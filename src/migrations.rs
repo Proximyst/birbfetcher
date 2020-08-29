@@ -16,7 +16,11 @@
 
 use strum_macros::EnumIter;
 
+/// Migrations from one version of data to another.
+///
+/// These define how to convert from old data to data we can process currently.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, EnumIter)]
+#[repr(u32)] // Ensure we never get a field on a variant, and that it's always the correct size.
 pub enum Migrations {
     // Ensure this is sorted! This is required for proper migrations due to the
     // enum iterator!
@@ -28,8 +32,10 @@ pub enum Migrations {
 }
 
 impl Migrations {
+    /// Get all queries with this migration.
     pub fn queries(self) -> Vec<String> {
         match self {
+            // TODO(Proximyst): Create macro for migrations
             Self::V1 => include_str!("migrations/0001-create-tables.sql"),
             Self::V2 => include_str!("migrations/0002-add-verified-column.sql"),
             Self::V3 => include_str!("migrations/0003-unsigned-id-column.sql"),
@@ -37,7 +43,7 @@ impl Migrations {
         .split(';')
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(Into::into)
+        .map(str::to_string)
         .collect()
     }
 }

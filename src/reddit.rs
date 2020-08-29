@@ -14,12 +14,16 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+// TODO(Proximyst): Ugly file, needa redo this.
+
 use crate::prelude::*;
 use serde::Deserialize;
 use strum_macros::Display;
 
+/// The base URL of the Reddit API.
 const REDDIT_API: &'static str = "https://reddit.com";
 
+/// The types of posts we can fetch.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Display)]
 pub enum PostType {
     #[strum(serialize = "new")]
@@ -29,6 +33,7 @@ pub enum PostType {
     Hot,
 }
 
+/// A data structure of Reddit posts.
 #[derive(Debug, PartialEq, Eq, Deserialize)]
 pub struct RedditPost {
     pub banned_by: Option<String>,

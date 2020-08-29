@@ -43,19 +43,26 @@ use std::time::Duration;
 use strum::IntoEnumIterator as _;
 use warp::Filter as _;
 
+/// An asynchronous reqwest client for HTTP requests.
+///
+/// This embeds an identifying User-Agent header into every request.
 pub static REQWEST_CLIENT: Lazy<ReqwestClient> = Lazy::new(|| {
     use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
     let mut headers = HeaderMap::new();
     headers.insert(
         USER_AGENT,
         HeaderValue::from_str(
-            &env::var("USER_AGENT").unwrap_or_else(|_| "Mozilla/5.0 birbfetcher/bot".into()),
+            // Either the env var...
+            &env::var("USER_AGENT")
+                // or the format mandated by Reddit's API spec.
+                .unwrap_or_else(|_| "Mozilla/5.0 birbfetcher/bot".into()),
         )
+        // Panicking is fine because only the env var may be invalid in this case
         .expect("a valid USER_AGENT env var is required"),
     );
 
     ReqwestClient::builder()
-        .use_rustls_tls()
+        .use_rustls_tls() // TODO(Proximyst): Support OpenSSL
         .default_headers(headers)
         .build()
         .expect("a reqwest client is required")
@@ -77,11 +84,11 @@ This is free software, and you are welcome to redistribute it
 under certain conditions.
 "#
     );
+
     match err_main().await {
         Ok(()) => return,
         Err(e) => {
-            error!("Error on running the application:");
-            error!("{:?}", e);
+            error!("Error on running the application:\n{:?}", e);
             std::process::exit(1);
         }
     }
@@ -90,7 +97,7 @@ under certain conditions.
 async fn err_main() -> Result<()> {
     match dotenv::dotenv() {
         Ok(_) => (),
-        Err(e) if e.not_found() => (),
+        Err(e) if e.not_found() => (), // No .env file is fine (may e.g. use Docker).
         Err(e) => return Err(e.into()),
     }
     pretty_env_logger::try_init()?;
@@ -100,6 +107,8 @@ async fn err_main() -> Result<()> {
     let pool = MySqlPool::new(&db).await?;
 
     // {{{ Database migrations
+    // Make sure the table exists before we try to modify and fetch from it.
+    // We use a TINYINT(0) DEFAULT 0 because that makes sure only 1 row exists, ever.
     sqlx::query(
         r#"
 CREATE TABLE IF NOT EXISTS `meta_version`
@@ -113,10 +122,12 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     )
     .execute(&pool)
     .await?;
+    // If we fail inserting, just move along. We don't really care.
     sqlx::query("INSERT IGNORE INTO `meta_version` (`version`) VALUES (0)")
         .execute(&pool)
         .await?;
 
+    // Fetch the version; no limit because there may only be 1 row.
     let version: (u32,) = sqlx::query_as("SELECT `version` FROM `meta_version`")
         .fetch_one(&pool)
         .await?;
@@ -124,18 +135,32 @@ CREATE TABLE IF NOT EXISTS `meta_version`
 
     debug!("Found DB version: {}", version);
 
-    for migration in self::migrations::Migrations::iter().filter(|mig| (*mig as u32) > version) {
+    // Let's use a transaction to be able to rollback.
+    let mut tx = pool.begin().await?;
+    for migration in self::migrations::Migrations::iter()
+        // We only want to migrate if the version is currently below that which we want to
+        // migrate up to. I.e. if we're version 1, we don't want to migrate to version 1.
+        .filter(|mig| (*mig as u32) > version)
+    {
+        // Migrations is #[repr(u32)].
         let ver = migration as u32;
         debug!("Applying migration to V{}", ver);
+
+        // Queries are limited by ;s.
         for query in migration.queries() {
-            sqlx::query(&query).execute(&pool).await?;
+            // If this query fails, the transaction is rolled back.
+            sqlx::query(&query).execute(&mut tx).await?;
         }
-        debug!("Finished migrating to V{}, now setting version...", ver);
+
+        // If this query fails, the transaction is rolled back.
         sqlx::query(&format!("UPDATE `meta_version` SET `version` = {}", ver))
-            .execute(&pool)
+            .execute(&mut tx)
             .await?;
-        debug!("Version set to {}", ver);
+        debug!("Migration for V{} successful.", ver);
     }
+    debug!("Committing transaction...");
+    tx.commit().await?;
+    debug!("Migrations finished!");
     // }}}
 
     info!("Database connection created, and migrations finished!");
@@ -143,6 +168,7 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     let birb_dir = env::var("BIRB_DIRECTORY").unwrap_or_else(|_| "birbs".into());
     let birb_dir = PathBuf::from(birb_dir);
     if birb_dir.metadata().is_err() {
+        // Metadata should only fail if there is no such dir.
         std::fs::create_dir_all(&birb_dir)?;
     }
 
@@ -151,6 +177,7 @@ CREATE TABLE IF NOT EXISTS `meta_version`
         .unwrap_or_else(|_| vec!["birbs".into(), "parrots".into(), "birb".into()]);
 
     // {{{ Discord bot
+    // TODO(Proximyst): Replace with API and separate bot/UI
     let mut discord = DiscordClient::new(
         &env::var("DISCORD_TOKEN").context("`DISCORD_TOKEN` must be set")?,
         self::discord::Handler,
@@ -212,9 +239,7 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     // {{{ GET / - random image
     let root_pool = pool.clone();
     let root_birb_dir = birb_dir.clone();
-    let root = warp::get()
-        .and(warp::path::end())
-        .and_then(move || {
+    let root = warp::get().and(warp::path::end()).and_then(move || {
         let pool = root_pool.clone();
         let birb_dir = root_birb_dir.clone();
         async move { self::http::random_image(&pool, &birb_dir).await }
@@ -263,13 +288,12 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     // }}}
 
     warp::serve(
-        root
-            .or(random)
+        root.or(random)
             .or(get_by_id)
             .or(get_info_by_id)
             .recover(self::http::handle_rejection),
     )
-    .run(([0, 0, 0, 0], 8080))
+    .run(([0, 0, 0, 0], 8080)) // TODO(Proximyst): Configurable
     .await;
 
     Ok(())
