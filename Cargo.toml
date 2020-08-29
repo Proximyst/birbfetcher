@@ -1,6 +1,6 @@
 [package]
 name = "birbfetcher"
-version = "0.2.3"
+version = "0.2.4"
 authors = ["Mariell Hoversholm <proximyst@proximyst.com>"]
 edition = "2018"
 

@@ -23,6 +23,16 @@ use std::path::PathBuf;
 use warp::http::{Response, StatusCode};
 use warp::{Rejection, Reply};
 
+#[derive(Serialize)]
+struct ImageData {
+    id: u32,
+    hash: String,
+    permalink: String,
+    content_type: String,
+    banned: bool,
+    verified: bool,
+}
+
 // {{{ Macros
 macro_rules! delegate {
     ($impl:expr => |$err:ident| $errlog:block) => {
@@ -106,6 +116,36 @@ async fn get_by_id_impl(
 }
 // }}}
 
+// {{{ GET /info/random - get info of random image
+pub async fn get_random_info(db: &MySqlPool) -> Result<impl Reply, Rejection> {
+    delegate! {
+        get_random_info_impl(db) => |e|
+            error!("Error upon calling get_random_info HTTP endpoint: {}", e)
+    }
+}
+
+async fn get_random_info_impl(db: &MySqlPool) -> Result<impl Reply, HttpError> {
+    let (id, hash, permalink, content_type, banned, verified): (u32, Vec<u8>, String, String, bool, bool) =
+        sqlx::query_as(
+            "SELECT id, hash, permalink, content_type, banned, verified FROM birbs WHERE banned = false ORDER BY RAND() LIMIT 1",
+        )
+        .fetch_one(db)
+        .await
+        .status(StatusCode::NOT_FOUND)?;
+
+    let data = ImageData {
+        id,
+        hash: hex::encode_upper(hash),
+        permalink,
+        content_type,
+        banned,
+        verified,
+    };
+
+    Ok(warp::reply::json(&data))
+}
+// }}}
+
 // {{{ GET /info/id/:id - get image info by id
 pub async fn get_info_by_id(db: &MySqlPool, id: u32) -> Result<impl Reply, Rejection> {
     delegate! {
@@ -126,16 +166,6 @@ async fn get_info_by_id_impl(db: &MySqlPool, id: u32) -> Result<impl Reply, Http
         .fetch_one(db)
         .await
         .status(StatusCode::NOT_FOUND)?;
-
-    #[derive(Serialize)]
-    struct ImageData {
-        id: u32,
-        hash: String,
-        permalink: String,
-        content_type: String,
-        banned: bool,
-        verified: bool,
-    }
 
     let data = ImageData {
         id,

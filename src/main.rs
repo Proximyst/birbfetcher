@@ -274,6 +274,18 @@ CREATE TABLE IF NOT EXISTS `meta_version`
         });
     // }}}
 
+    // {{{ GET /info/random - get random image info
+    let get_random_info_pool = pool.clone();
+    let get_random_info = warp::get()
+        .and(warp::path("info"))
+        .and(warp::path("random"))
+        .and(warp::path::end())
+        .and_then(move || {
+            let pool = get_random_info_pool.clone();
+            async move { self::http::get_random_info(&pool).await }
+        });
+    // }}}
+
     // {{{ GET /info/id/:id - get image info by id
     let get_info_by_id_pool = pool.clone();
     let get_info_by_id = warp::get()
@@ -290,6 +302,7 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     warp::serve(
         root.or(random)
             .or(get_by_id)
+            .or(get_random_info)
             .or(get_info_by_id)
             .recover(self::http::handle_rejection),
     )
