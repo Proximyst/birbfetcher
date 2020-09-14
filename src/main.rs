@@ -38,6 +38,7 @@ use serenity::client::Client as DiscordClient;
 use serenity::framework::standard::StandardFramework;
 use std::collections::{HashMap, HashSet};
 use std::env;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 use strum::IntoEnumIterator as _;
@@ -306,7 +307,11 @@ CREATE TABLE IF NOT EXISTS `meta_version`
             .or(get_info_by_id)
             .recover(self::http::handle_rejection),
     )
-    .run(([0, 0, 0, 0], 8080)) // TODO(Proximyst): Configurable
+    .run(
+        env::var("ADDRESS")
+            .unwrap_or_else(|_| "0.0.0.0:8080".into())
+            .parse::<SocketAddr>()?,
+    )
     .await;
 
     Ok(())
