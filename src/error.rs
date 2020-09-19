@@ -31,6 +31,18 @@ pub enum RedditError {
     /// The HTTP request returned a bad status code.
     #[error("unsuccessful http request: {0}")]
     Unsuccessful(reqwest::StatusCode),
+
+    #[error("no such post was found")]
+    NoPost,
+}
+
+#[derive(Debug, Error)]
+pub enum CheckingError {
+    #[error("error when modifying database: {0}")]
+    Sql(#[from] sqlx::Error),
+
+    #[error("unsuccessful reddit api request: {0}")]
+    Reddit(#[from] RedditError),
 }
 
 /// An error related to processing of images.

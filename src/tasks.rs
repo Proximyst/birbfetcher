@@ -16,6 +16,7 @@
 
 use crate::prelude::*;
 use crate::reddit::*;
+use chrono::{TimeZone as _, Utc};
 use sha2::Digest as _;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -92,6 +93,55 @@ async fn process_post(
     .bind(content_type)
     .execute(db)
     .await?;
+
+    Ok(())
+}
+
+pub async fn process_checking(
+    db: &MySqlPool,
+    id: u32,
+    permalink: &str,
+) -> Result<(), CheckingError> {
+    let post = crate::reddit::request_single_post(permalink).await;
+    let post = match post {
+        Err(RedditError::NoPost) => {
+            info!("Banning post {} ({}) due to NoPost", id, permalink);
+            sqlx::query("UPDATE `birbs` SET `banned` = true, `verified` = false WHERE `id` = ?")
+                .bind(id)
+                .execute(db)
+                .await?;
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+        Ok(post) => post,
+    };
+
+    if post.is_unsafe()
+        || post.over_18
+        || post.quarantine
+        || post.banned_by.filter(|s| !s.trim().is_empty()).is_some()
+        || post.hidden
+    {
+        info!("Banning post {} ({}) due to failed check", id, permalink);
+        sqlx::query("UPDATE `birbs` SET `banned` = true, `verified` = false WHERE `id` = ?")
+            .bind(id)
+            .execute(db)
+            .await?;
+    } else if post.score >= 128
+        || Utc
+            .timestamp(post.created as i64, 0)
+            .date()
+            .signed_duration_since(Utc::today())
+            .num_days()
+            >= 60
+    {
+        // This is very likely safe to verify.
+        info!("Verifying post {} ({})", id, permalink);
+        sqlx::query("UPDATE `birbs` SET `verified` = true, `banned` = false WHERE `id` = ?")
+            .bind(id)
+            .execute(db)
+            .await?;
+    }
 
     Ok(())
 }

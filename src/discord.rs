@@ -75,7 +75,7 @@ impl EventHandler for Handler {
 
         match reaction.emoji {
             ReactionType::Custom { id, .. } if *id.as_u64() == REACTIONS.ban => {
-                let err = sqlx::query("UPDATE birbs SET banned = true WHERE id = ?")
+                let err = sqlx::query("UPDATE birbs SET banned = true AND verified = false WHERE id = ?")
                     .bind(img)
                     .execute(db);
                 let err = futures::executor::block_on(err);
@@ -96,7 +96,7 @@ impl EventHandler for Handler {
             }
 
             ReactionType::Custom { id, .. } if *id.as_u64() == REACTIONS.verify => {
-                let err = sqlx::query("UPDATE birbs SET verified = true WHERE id = ?")
+                let err = sqlx::query("UPDATE birbs SET verified = true AND banned = false WHERE id = ?")
                     .bind(img)
                     .execute(db);
                 let err = futures::executor::block_on(err);
@@ -171,7 +171,7 @@ pub fn ban(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
         .get::<DatabaseContainer>()
         .expect("database must exist");
 
-    let err = sqlx::query("UPDATE birbs SET banned = true WHERE id = ?")
+    let err = sqlx::query("UPDATE birbs SET banned = true AND verified = false WHERE id = ?")
         .bind(id)
         .execute(db);
     let err = futures::executor::block_on(err);
@@ -198,7 +198,7 @@ pub fn verify(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult
         .get::<DatabaseContainer>()
         .expect("database must exist");
 
-    let err = sqlx::query("UPDATE birbs SET verified = true WHERE id = ?")
+    let err = sqlx::query("UPDATE birbs SET verified = true AND banned = false WHERE id = ?")
         .bind(id)
         .execute(db);
     let err = futures::executor::block_on(err);

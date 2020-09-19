@@ -237,6 +237,53 @@ CREATE TABLE IF NOT EXISTS `meta_version`
     });
     // }}}
 
+    // {{{ Verify posts every 5s timer
+    let timer_pool = pool.clone();
+    tokio::spawn(async move {
+        let mut timer = async_timer::Interval::platform_new(Duration::from_secs(5));
+        let mut curr_id = 0u32;
+        let pool = timer_pool;
+
+        loop {
+            let query = sqlx::query_as(
+                r#"
+                SELECT `id`, `permalink`
+                FROM `birbs`
+                WHERE `banned` = false
+                    AND `verified` = false
+                    AND `id` > ?
+                ORDER BY `id` ASC
+                LIMIT 1"#,
+            )
+            .bind(curr_id)
+            .fetch_optional(&pool)
+            .await;
+            match query {
+                Err(e) => error!("Could not find next ID to verify: {}", e),
+                Ok(res) => {
+                    match res {
+                        None => {
+                            curr_id = 0;
+                            tokio::time::delay_for(Duration::from_secs(600)).await;
+                            continue;
+                        }
+                        Some((id, permalink)) => {
+                            // Infer the type of the result.
+                            let (id, permalink): (u32, String) = (id, permalink);
+                            curr_id = id;
+
+                            if let Err(e) = tasks::process_checking(&pool, id, &permalink).await {
+                                error!("Error when processing {} ({}): {}", id, permalink, e);
+                            }
+                        }
+                    }
+                }
+            }
+            timer.as_mut().await;
+        }
+    });
+    // }}}
+
     // {{{ GET / - random image
     let root_pool = pool.clone();
     let root_birb_dir = birb_dir.clone();
