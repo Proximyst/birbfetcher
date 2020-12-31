@@ -1,5 +1,5 @@
 // birbfetcher - Collect bird images with ease.
-// Copyright (C) 2020 Mariell Hoversholm
+// Copyright (C) 2020-2021 Mariell Hoversholm
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
